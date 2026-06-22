@@ -4,6 +4,7 @@
   "description": "Use AIX Router models directly from the GitHub Copilot Chat model picker. BYOK, vision-capable models, thinking mode, and agent tools.",
   "version": "0.0.1",
   "publisher": "aixrouter",
+  "icon": "resources/icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",

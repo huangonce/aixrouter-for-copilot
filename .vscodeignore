@@ -1,4 +1,5 @@
 .git/**
+.git-real/**
 .agents/**
 .codex/**
 .vscode/**
