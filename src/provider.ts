@@ -39,6 +39,7 @@ export class AIXRouterChatProvider implements vscode.LanguageModelChatProvider {
   readonly onDidChangeLanguageModelChatInformation = this.onDidChangeEmitter.event;
 
   private cachedModels: AIXRouterModelConfig[] = [];
+  private lastModelLoadError?: string;
 
   constructor(
     private readonly auth: AuthStore,
@@ -145,13 +146,38 @@ export class AIXRouterChatProvider implements vscode.LanguageModelChatProvider {
     try {
       const models = await new AIXRouterClient(baseUrl, apiKey, getPublicModelMetadataEnabled()).listModels(abort.signal);
       this.logger.info(`Loaded ${models.length} Magic Router model(s).`);
+      this.lastModelLoadError = undefined;
       return models;
     } catch (error) {
       this.logger.error('Failed to load models from Magic Router', error);
+      this.notifyModelLoadError(error);
       return [];
     } finally {
       disposable.dispose();
     }
+  }
+
+  private notifyModelLoadError(error: unknown): void {
+    const message = getErrorMessage(error);
+    if (this.lastModelLoadError === message) {
+      return;
+    }
+
+    this.lastModelLoadError = message;
+    void vscode.window.showWarningMessage(
+      `Could not load Magic Router models. ${message}`,
+      'Set API Key',
+      'Set Base URL',
+      'Open Settings',
+    ).then(async (action) => {
+      if (action === 'Set API Key') {
+        await vscode.commands.executeCommand('magicrouter.setApiKey');
+      } else if (action === 'Set Base URL') {
+        await vscode.commands.executeCommand('magicrouter.setBaseUrl');
+      } else if (action === 'Open Settings') {
+        await vscode.commands.executeCommand('magicrouter.openSettings');
+      }
+    });
   }
 
   private resolveModel(modelId: string): AIXRouterModelConfig {
@@ -238,6 +264,10 @@ function getSetupDetail(hasUrl: boolean, hasKey: boolean): string {
     return 'Run Magic Router: Set Base URL';
   }
   return 'Run Magic Router: Set API Key';
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function toConfigurationSchema(model: AIXRouterModelConfig): { configurationSchema?: object } {

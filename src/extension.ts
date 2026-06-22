@@ -4,6 +4,8 @@ import { hasBaseUrl, openSettings, setBaseUrl } from './config';
 import { Logger } from './logger';
 import { AIXRouterChatProvider } from './provider';
 
+const INITIAL_SETUP_PROMPT_KEY = 'magicrouter.initialSetupPromptShown';
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const logger = new Logger();
   const auth = new AuthStore(context.secrets);
@@ -36,7 +38,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   await activateCopilotChat(logger);
   provider.refreshModelPicker();
-  void promptForInitialConfiguration(auth, provider);
+  void promptForInitialConfiguration(context, auth, provider);
 }
 
 export function deactivate(): void {
@@ -52,18 +54,30 @@ async function activateCopilotChat(logger: Logger): Promise<void> {
 }
 
 async function promptForInitialConfiguration(
+  context: vscode.ExtensionContext,
   auth: AuthStore,
   provider: AIXRouterChatProvider,
 ): Promise<void> {
   if (hasBaseUrl() && await auth.hasApiKey()) {
     return;
   }
+  if (context.globalState.get<boolean>(INITIAL_SETUP_PROMPT_KEY, false)) {
+    return;
+  }
+
+  await context.globalState.update(INITIAL_SETUP_PROMPT_KEY, true);
 
   const action = await vscode.window.showInformationMessage(
     'Configure Magic Router for Copilot to add models to Copilot Chat.',
     'Configure',
+    'Open Settings',
     'Later',
   );
+
+  if (action === 'Open Settings') {
+    await openSettings();
+    return;
+  }
 
   if (action !== 'Configure') {
     return;
