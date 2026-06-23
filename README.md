@@ -57,6 +57,32 @@ Common Base URLs:
 | `magicrouter.enrichPublicModelMetadata` | `true` | Enrich cost, multimodal, and context metadata from the public model catalog for AIXRouter and AgileRouter base URLs. |
 | `magicrouter.debug` | `false` | Write request diagnostics to the output channel. Prompt text is not logged. |
 
+## Recommended Model Metadata
+
+`{baseUrl}/models` is the authoritative source for model availability. For the best Copilot model picker experience, each model can include capability, context, and pricing metadata:
+
+```json
+{
+  "id": "claude-opus-4.6",
+  "owned_by": "Anthropic",
+  "type": "Multimodal",
+  "contextWindow": 1000000,
+  "maxOutputTokens": 32000,
+  "capabilities": {
+    "toolCalling": true,
+    "vision": true,
+    "thinking": true
+  },
+  "pricing": {
+    "currencyCode": "USD",
+    "inputPer1M": 5,
+    "outputPer1M": 25,
+    "cacheHitPer1M": 0.5,
+    "cacheCreationPer1M": 0
+  }
+}
+```
+
 ## Development
 
 ```bash

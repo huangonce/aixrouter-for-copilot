@@ -49,6 +49,32 @@
 | `magicrouter.enrichPublicModelMetadata` | `true` | 对 AIXRouter / AgileRouter Base URL，从公开模型页补齐成本、多模态和上下文信息 |
 | `magicrouter.debug` | `false` | 输出调试日志，不记录完整提示词 |
 
+## 推荐模型元数据
+
+`{baseUrl}/models` 是模型列表和模型能力的权威来源。为了让 Copilot 模型选择器显示更完整，建议每个模型返回能力、上下文和价格字段：
+
+```json
+{
+  "id": "claude-opus-4.6",
+  "owned_by": "Anthropic",
+  "type": "Multimodal",
+  "contextWindow": 1000000,
+  "maxOutputTokens": 32000,
+  "capabilities": {
+    "toolCalling": true,
+    "vision": true,
+    "thinking": true
+  },
+  "pricing": {
+    "currencyCode": "USD",
+    "inputPer1M": 5,
+    "outputPer1M": 25,
+    "cacheHitPer1M": 0.5,
+    "cacheCreationPer1M": 0
+  }
+}
+```
+
 固定模型示例：
 
 ```json

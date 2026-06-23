@@ -12,15 +12,27 @@ interface RawModel {
   readonly owned_by?: string;
   readonly context_length?: number;
   readonly max_context_length?: number;
+  readonly contextWindow?: number;
+  readonly maxInputTokens?: number;
   readonly max_output_tokens?: number;
+  readonly maxOutputTokens?: number;
   readonly inputPer1M?: number;
   readonly outputPer1M?: number;
   readonly cacheHitPer1M?: number;
   readonly cacheCreationPer1M?: number;
   readonly currencyCode?: string;
+  readonly pricing?: {
+    readonly currencyCode?: string;
+    readonly inputPer1M?: number;
+    readonly outputPer1M?: number;
+    readonly cacheHitPer1M?: number;
+    readonly cacheCreationPer1M?: number;
+  };
   readonly capabilities?: Record<string, unknown>;
   readonly type?: string;
   readonly vendor?: string;
+  readonly modelVendorName?: string;
+  readonly family?: string;
 }
 
 interface ToolCallAccumulator {
@@ -189,15 +201,28 @@ function toModelConfig(model: RawModel): AIXRouterModelConfig | undefined {
 
   const capabilities = model.capabilities ?? {};
   const modelText = normalizeModelText(model);
+  const maxInputTokens = numberFrom(
+    model.contextWindow,
+    model.maxInputTokens,
+    model.context_length,
+    model.max_context_length,
+  );
+  const maxOutputTokens = numberFrom(model.maxOutputTokens, model.max_output_tokens);
+  const family = firstString(model.modelVendorName, model.vendor, model.family);
 
   return {
     id: model.id,
     name: model.name || model.id,
-    family: isPlaceholderOwner(model.owned_by) ? model.vendor || inferFamily(model.id) : model.owned_by,
+    family: isPlaceholderOwner(model.owned_by) ? family || inferFamily(model.id) : model.owned_by,
     version: 'magicrouter',
-    maxInputTokens: numberFrom(model.context_length, model.max_context_length) ?? 128000,
-    maxOutputTokens: numberFrom(model.max_output_tokens) ?? 8192,
-    toolCalling: booleanFrom(capabilities.tool_calling, capabilities.tools, capabilities.function_calling) ?? true,
+    maxInputTokens: maxInputTokens ?? 128000,
+    maxOutputTokens: maxOutputTokens ?? 8192,
+    toolCalling: booleanFrom(
+      capabilities.toolCalling,
+      capabilities.tool_calling,
+      capabilities.tools,
+      capabilities.function_calling,
+    ) ?? true,
     vision: booleanFrom(
       capabilities.vision,
       capabilities.image_input,
@@ -206,17 +231,17 @@ function toModelConfig(model: RawModel): AIXRouterModelConfig | undefined {
       capabilities.multi_modal,
     ) ?? looksVisionCapable(modelText),
     thinking: booleanFrom(capabilities.reasoning, capabilities.thinking) ?? looksThinkingCapable(modelText),
-    contextWindows: getContextWindows(modelText, numberFrom(model.context_length, model.max_context_length)),
+    contextWindows: getContextWindows(modelText, maxInputTokens),
     sourceType: model.type,
     pricing: toApiPricing(model),
   };
 }
 
 function toApiPricing(model: RawModel): AIXRouterModelConfig['pricing'] {
-  const inputPer1M = numberFrom(model.inputPer1M);
-  const outputPer1M = numberFrom(model.outputPer1M);
-  const cacheHitPer1M = numberFrom(model.cacheHitPer1M);
-  const cacheCreationPer1M = numberFrom(model.cacheCreationPer1M);
+  const inputPer1M = numberFrom(model.pricing?.inputPer1M, model.inputPer1M);
+  const outputPer1M = numberFrom(model.pricing?.outputPer1M, model.outputPer1M);
+  const cacheHitPer1M = numberFrom(model.pricing?.cacheHitPer1M, model.cacheHitPer1M);
+  const cacheCreationPer1M = numberFrom(model.pricing?.cacheCreationPer1M, model.cacheCreationPer1M);
 
   if (
     inputPer1M === undefined &&
@@ -228,7 +253,7 @@ function toApiPricing(model: RawModel): AIXRouterModelConfig['pricing'] {
   }
 
   return {
-    currencyCode: model.currencyCode || 'USD',
+    currencyCode: model.pricing?.currencyCode || model.currencyCode || 'USD',
     inputPer1M,
     outputPer1M,
     cacheHitPer1M,
@@ -251,6 +276,8 @@ function normalizeModelText(model: RawModel): string {
     model.name,
     model.owned_by,
     model.vendor,
+    model.modelVendorName,
+    model.family,
     model.type,
   ]
     .filter(Boolean)
@@ -325,6 +352,15 @@ function numberFrom(...values: unknown[]): number | undefined {
   for (const value of values) {
     if (typeof value === 'number' && Number.isFinite(value)) {
       return value;
+    }
+  }
+  return undefined;
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
     }
   }
   return undefined;
