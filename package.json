@@ -9,11 +9,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/aixrouter/aixrouter-for-copilot.git"
+    "url": "https://github.com/huangonce/aixrouter-for-copilot.git"
   },
-  "homepage": "https://github.com/aixrouter/aixrouter-for-copilot#readme",
+  "homepage": "https://github.com/huangonce/aixrouter-for-copilot#readme",
   "bugs": {
-    "url": "https://github.com/aixrouter/aixrouter-for-copilot/issues"
+    "url": "https://github.com/huangonce/aixrouter-for-copilot/issues"
   },
   "engines": {
     "vscode": "^1.116.0",
