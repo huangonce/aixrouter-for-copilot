@@ -39,6 +39,7 @@ export class AIXRouterChatProvider implements vscode.LanguageModelChatProvider {
   readonly onDidChangeLanguageModelChatInformation = this.onDidChangeEmitter.event;
 
   private cachedModels: AIXRouterModelConfig[] = [];
+  private modelLoadPromise?: Promise<AIXRouterModelConfig[]>;
   private lastModelLoadError?: string;
 
   constructor(
@@ -56,6 +57,7 @@ export class AIXRouterChatProvider implements vscode.LanguageModelChatProvider {
 
   refreshModelPicker(): void {
     this.cachedModels = [];
+    this.modelLoadPromise = undefined;
     this.onDidChangeEmitter.fire();
   }
 
@@ -76,7 +78,9 @@ export class AIXRouterChatProvider implements vscode.LanguageModelChatProvider {
     }
 
     if (this.cachedModels.length === 0) {
-      this.cachedModels = await this.loadModels(token);
+      this.modelLoadPromise ??= this.loadModels(token);
+      this.cachedModels = await this.modelLoadPromise;
+      this.modelLoadPromise = undefined;
     }
 
     return this.cachedModels.map((model) => toChatInfo(model, hasKey, hasUrl));
@@ -189,7 +193,7 @@ export class AIXRouterChatProvider implements vscode.LanguageModelChatProvider {
       id: modelId,
       name: modelId,
       toolCalling: true,
-      vision: true,
+      vision: false,
       thinking: false,
     };
   }
@@ -356,14 +360,6 @@ function formatContextWindow(value: number): string {
     return `${value / 1000000}M`;
   }
   return `${Math.round(value / 1000)}K`;
-}
-
-function buildThinkingSchema(): object {
-  return {
-    properties: {
-      reasoningEffort: buildReasoningEffortProperty(),
-    },
-  };
 }
 
 function getConfiguredReasoningEffort(

@@ -100,7 +100,13 @@ export function estimateTokenCount(text: string | vscode.LanguageModelChatReques
     typeof text === 'string'
       ? text
       : text.content.map(partToText).join('');
-  return Math.max(1, Math.ceil(value.length / 4));
+  return estimateTextTokens(value);
+}
+
+function estimateTextTokens(value: string): number {
+  const cjkMatches = value.match(/[\u3400-\u9fff\uf900-\ufaff]/g) ?? [];
+  const nonCjkLength = value.length - cjkMatches.length;
+  return Math.max(1, cjkMatches.length + Math.ceil(nonCjkLength / 4));
 }
 
 function partToText(part: unknown): string {
@@ -233,9 +239,13 @@ function dataPartFromDataUrl(value: string, fallbackMimeType: string): { mimeTyp
   };
 }
 
-function mapRole(role: vscode.LanguageModelChatMessageRole): 'user' | 'assistant' {
+function mapRole(role: vscode.LanguageModelChatMessageRole): 'user' | 'assistant' | 'system' {
   if (role === vscode.LanguageModelChatMessageRole.Assistant) {
     return 'assistant';
+  }
+  const SystemRole = (vscode.LanguageModelChatMessageRole as unknown as { System?: vscode.LanguageModelChatMessageRole }).System;
+  if (SystemRole !== undefined && role === SystemRole) {
+    return 'system';
   }
   return 'user';
 }

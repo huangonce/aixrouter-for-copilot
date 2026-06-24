@@ -42,6 +42,12 @@ interface ClaudeMessageRequest {
   readonly tools?: ClaudeTool[];
   readonly max_tokens?: number;
   readonly temperature?: number;
+  readonly thinking?: ClaudeThinking;
+}
+
+interface ClaudeThinking {
+  readonly type: 'enabled';
+  readonly budget_tokens: number;
 }
 
 interface ClaudeMessage {
@@ -350,11 +356,7 @@ async function processOpenAIFullResponse(
     for (const rawToolCall of message?.tool_calls ?? []) {
       const index = rawToolCall.index ?? toolCalls.size;
       const current = toolCalls.get(index) ?? { id: '', name: '', arguments: '' };
-      current.id += rawToolCall.id ?? '';
-      current.name += rawToolCall.function?.name ?? '';
-      current.arguments += typeof rawToolCall.function?.arguments === 'string'
-        ? rawToolCall.function.arguments
-        : JSON.stringify(rawToolCall.function?.arguments ?? {});
+      applyToolCallDelta(current, rawToolCall);
       toolCalls.set(index, current);
     }
   } catch {
@@ -399,6 +401,7 @@ function summarizeClaudeRequest(endpoint: string, request: ClaudeMessageRequest)
     tools: request.tools?.length ?? 0,
     maxTokens: request.max_tokens,
     hasTemperature: request.temperature !== undefined,
+    thinkingBudget: request.thinking?.budget_tokens,
   });
 }
 
@@ -443,8 +446,38 @@ function toClaudeMessageRequest(request: ChatCompletionRequest, stream: boolean)
     stream,
     tools: toClaudeTools(request.tools),
     max_tokens: maxTokens,
-    temperature: request.temperature,
+    temperature: clampClaudeTemperature(request.temperature),
+    thinking: toClaudeThinking(request.reasoning_effort, maxTokens),
   };
+}
+
+function clampClaudeTemperature(value: number | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return Math.max(0, Math.min(1, value));
+}
+
+function toClaudeThinking(
+  effort: ChatCompletionRequest['reasoning_effort'],
+  maxTokens: number,
+): ClaudeThinking | undefined {
+  if (!effort) {
+    return undefined;
+  }
+
+  const targetBudget = {
+    low: 1024,
+    medium: 4096,
+    high: 8192,
+    max: 16000,
+  }[effort];
+  const availableBudget = Math.max(0, maxTokens - 1024);
+  const budgetTokens = Math.min(targetBudget, availableBudget);
+  if (budgetTokens < 1024) {
+    return undefined;
+  }
+  return { type: 'enabled', budget_tokens: budgetTokens };
 }
 
 function appendClaudeMessage(messages: ClaudeMessage[], message: ClaudeMessage): void {
@@ -533,9 +566,13 @@ function processClaudeData(
     });
   }
 
-  const fullText = extractClaudeFullText(json.content);
-  if (fullText) {
-    handlers.onText(fullText);
+  const fullContent = extractClaudeFullContent(json.content);
+  if (fullContent.text) {
+    handlers.onText(fullContent.text);
+    state.emitted = true;
+  }
+  if (fullContent.thinking) {
+    handlers.onThinking(fullContent.thinking);
     state.emitted = true;
   }
 
@@ -607,24 +644,22 @@ function extractText(value: unknown): string | undefined {
   return text.length > 0 ? text : undefined;
 }
 
-function extractClaudeFullText(content: unknown): string | undefined {
+function extractClaudeFullContent(content: unknown): { text?: string; thinking?: string } {
   if (!Array.isArray(content)) {
-    return undefined;
+    return {};
   }
 
   const text = content
-    .map((part) => {
-      if (typeof part?.text === 'string') {
-        return part.text;
-      }
-      if (typeof part?.thinking === 'string') {
-        return part.thinking;
-      }
-      return '';
-    })
+    .map((part) => typeof part?.text === 'string' ? part.text : '')
+    .join('');
+  const thinking = content
+    .map((part) => typeof part?.thinking === 'string' ? part.thinking : '')
     .join('');
 
-  return text.length > 0 ? text : undefined;
+  return {
+    text: text.length > 0 ? text : undefined,
+    thinking: thinking.length > 0 ? thinking : undefined,
+  };
 }
 
 function processSseData(
@@ -660,10 +695,23 @@ function processSseData(
   for (const rawToolCall of delta.tool_calls ?? []) {
     const index = rawToolCall.index ?? toolCalls.size;
     const current = toolCalls.get(index) ?? { id: '', name: '', arguments: '' };
-    current.id += rawToolCall.id ?? '';
-    current.name += rawToolCall.function?.name ?? '';
-    current.arguments += rawToolCall.function?.arguments ?? '';
+    applyToolCallDelta(current, rawToolCall);
     toolCalls.set(index, current);
+  }
+}
+
+function applyToolCallDelta(current: ToolCallAccumulator, rawToolCall: any): void {
+  if (rawToolCall.id) {
+    current.id = rawToolCall.id;
+  }
+  if (rawToolCall.function?.name) {
+    current.name = rawToolCall.function.name;
+  }
+  const rawArguments = rawToolCall.function?.arguments;
+  if (typeof rawArguments === 'string') {
+    current.arguments += rawArguments;
+  } else if (rawArguments !== undefined) {
+    current.arguments += JSON.stringify(rawArguments);
   }
 }
 
@@ -831,13 +879,7 @@ function looksThinkingCapable(modelText: string): boolean {
 
 function getContextWindows(modelText: string, apiContextWindow: number | undefined): number[] {
   const maxWindow = Math.max(apiContextWindow ?? 0, inferMaxContextWindow(modelText));
-  const candidates = [200000, 400000, 1000000].filter((value) => value <= maxWindow);
-
-  if (maxWindow >= 900000 && !candidates.includes(1000000)) {
-    candidates.push(1000000);
-  }
-
-  return candidates;
+  return [200000, 400000, 1000000].filter((value) => value <= maxWindow);
 }
 
 function inferMaxContextWindow(modelText: string): number {

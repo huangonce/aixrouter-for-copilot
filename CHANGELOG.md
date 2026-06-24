@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.5
+
+- Fix: Map Copilot reasoning effort to Claude extended thinking budgets.
+- Fix: Keep Claude non-stream thinking content separate from assistant text.
+- Fix: Avoid duplicated OpenAI-compatible tool call IDs and names in repeated stream chunks.
+- Fix: Use conservative fallback vision capabilities when a selected model is not cached.
+- Fix: Avoid advertising context windows above the inferred or API-provided model limit.
+- Improve: Deduplicate concurrent model list loads.
+- Improve: Clamp Claude temperature to the supported range and improve token estimates for CJK text.
+- Improve: Preserve system-role messages when VS Code provides them.
+
 ## 0.1.4
 
 - Fix: Claude empty SSE stream now retries once with `stream=false` instead of failing.
