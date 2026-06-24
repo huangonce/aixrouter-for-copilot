@@ -27,6 +27,7 @@ interface ToolCallAccumulator {
   id: string;
   name: string;
   arguments: string;
+  argumentsFallback?: string;
 }
 
 interface StreamState {
@@ -112,6 +113,12 @@ export class AIXRouterClient {
 
     if (!response.body) {
       throw new Error('Magic Router response body is empty.');
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!contentType.includes('text/event-stream')) {
+      await processOpenAIFullResponse(response, handlers);
+      return;
     }
 
     const reader = response.body.getReader();
@@ -213,7 +220,8 @@ export class AIXRouterClient {
         if (data === '[DONE]') {
           flushToolCalls(toolCalls, handlers);
           if (!state.emitted) {
-            throw emptyResponseError('Claude stream', preview);
+            this.debug?.('Claude stream was empty; retrying once with stream=false.');
+            await this.completeClaudeMessage(request, handlers, signal);
           }
           return;
         }
@@ -225,7 +233,8 @@ export class AIXRouterClient {
 
     flushToolCalls(toolCalls, handlers);
     if (!state.emitted) {
-      throw emptyResponseError('Claude stream', preview || buffer);
+      this.debug?.('Claude stream ended without content; retrying once with stream=false.');
+      await this.completeClaudeMessage(request, handlers, signal);
     }
   }
 
@@ -307,6 +316,55 @@ async function processClaudeFullResponse(
 
   if (!state.emitted) {
     throw emptyResponseError('Claude response', body);
+  }
+}
+
+async function processOpenAIFullResponse(
+  response: Response,
+  handlers: StreamHandlers,
+): Promise<void> {
+  const body = await response.text();
+  const toolCalls = new Map<number, ToolCallAccumulator>();
+  let emitted = false;
+
+  try {
+    const json = JSON.parse(body) as any;
+    if (json.usage) {
+      handlers.onUsage(json.usage);
+    }
+
+    const choice = json.choices?.[0];
+    const message = choice?.message ?? choice?.delta ?? json.message ?? json;
+    const text = extractText(message?.content ?? message?.text ?? json.text ?? json.response);
+    if (text) {
+      handlers.onText(text);
+      emitted = true;
+    }
+
+    const thinking = extractText(message?.reasoning_content ?? message?.reasoning ?? message?.thinking);
+    if (thinking) {
+      handlers.onThinking(thinking);
+      emitted = true;
+    }
+
+    for (const rawToolCall of message?.tool_calls ?? []) {
+      const index = rawToolCall.index ?? toolCalls.size;
+      const current = toolCalls.get(index) ?? { id: '', name: '', arguments: '' };
+      current.id += rawToolCall.id ?? '';
+      current.name += rawToolCall.function?.name ?? '';
+      current.arguments += typeof rawToolCall.function?.arguments === 'string'
+        ? rawToolCall.function.arguments
+        : JSON.stringify(rawToolCall.function?.arguments ?? {});
+      toolCalls.set(index, current);
+    }
+  } catch {
+    // Fall through to the empty response error below with a body preview.
+  }
+
+  const emittedTools = [...toolCalls.values()].some((toolCall) => Boolean(toolCall.name));
+  flushToolCalls(toolCalls, handlers);
+  if (!emitted && !emittedTools) {
+    throw emptyResponseError('OpenAI response', body);
   }
 }
 
@@ -504,6 +562,10 @@ function processClaudeData(
     if (delta?.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
       const index = json.index ?? toolCalls.size;
       const current = toolCalls.get(index) ?? { id: '', name: '', arguments: '' };
+      if (current.argumentsFallback !== undefined) {
+        current.arguments = '';
+        current.argumentsFallback = undefined;
+      }
       current.arguments += delta.partial_json;
       toolCalls.set(index, current);
       state.emitted = true;
@@ -516,10 +578,33 @@ function processClaudeData(
     toolCalls.set(index, {
       id: json.content_block.id || `call_${index}`,
       name: json.content_block.name || '',
-      arguments: JSON.stringify(json.content_block.input ?? {}),
+      arguments: '',
+      argumentsFallback: JSON.stringify(json.content_block.input ?? {}),
     });
     state.emitted = true;
   }
+}
+
+function extractText(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value.length > 0 ? value : undefined;
+  }
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const text = value
+    .map((part) => {
+      if (typeof part === 'string') {
+        return part;
+      }
+      if (typeof part?.text === 'string') {
+        return part.text;
+      }
+      return '';
+    })
+    .join('');
+  return text.length > 0 ? text : undefined;
 }
 
 function extractClaudeFullText(content: unknown): string | undefined {
@@ -595,7 +680,7 @@ function flushToolCalls(
       type: 'function',
       function: {
         name: toolCall.name,
-        arguments: toolCall.arguments || '{}',
+        arguments: toolCall.arguments || toolCall.argumentsFallback || '{}',
       },
     });
   }
@@ -618,13 +703,13 @@ function toModelConfig(model: RawModel): AIXRouterModelConfig | undefined {
     maxInputTokens: numberFrom(model.context_length, model.max_context_length) ?? 128000,
     maxOutputTokens: numberFrom(model.max_output_tokens) ?? 8192,
     toolCalling: booleanFrom(capabilities.tool_calling, capabilities.tools, capabilities.function_calling) ?? true,
-    vision: booleanFrom(
+    vision: looksVisionCapable(modelText) || (booleanFrom(
       capabilities.vision,
       capabilities.image_input,
       capabilities.imageInput,
       capabilities.multimodal,
       capabilities.multi_modal,
-    ) ?? looksVisionCapable(modelText),
+    ) ?? false),
     thinking: booleanFrom(capabilities.reasoning, capabilities.thinking) ?? looksThinkingCapable(modelText),
     contextWindows: getContextWindows(modelText, numberFrom(model.context_length, model.max_context_length)),
     sourceType: model.type,

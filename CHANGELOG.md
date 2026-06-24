@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4
+
+- Fix: Claude empty SSE stream now retries once with `stream=false` instead of failing.
+- Fix: OpenAI-compatible non-SSE JSON responses are now parsed and reported.
+- Fix: Claude tool call arguments no longer corrupt when `input_json_delta` follows `content_block_start`.
+- Fix: Model vision capabilities are not overridden by API-returned `false` for known vision models.
+- Enhance: Image data parts in nested or non-standard object shapes are now recognized.
+
 ## 0.1.0
 
 - Initial public preview.

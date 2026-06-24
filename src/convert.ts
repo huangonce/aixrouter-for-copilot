@@ -142,8 +142,14 @@ function summarizePart(part: unknown): string {
     return typeof part;
   }
 
+  const objectPart = part as Record<string, unknown>;
   const ctor = (part as { constructor?: { name?: string } }).constructor?.name ?? 'object';
-  const keys = Object.keys(part as Record<string, unknown>).slice(0, 6).join(',');
+  const keys = Object.keys(objectPart).slice(0, 8).join(',');
+  const value = objectPart.value;
+  if (value && typeof value === 'object') {
+    const valueKeys = Object.keys(value as Record<string, unknown>).slice(0, 8).join(',');
+    return `${ctor}{${keys}}.value{${valueKeys}}`;
+  }
   return `${ctor}{${keys}}`;
 }
 
@@ -165,24 +171,37 @@ function getDataPart(part: unknown): { mimeType: string; data: Uint8Array } | un
     return undefined;
   }
 
-  const candidate = part as {
-    mimeType?: unknown;
-    mime_type?: unknown;
-    mediaType?: unknown;
-    data?: unknown;
-    value?: unknown;
-  };
+  const candidate = part as Record<string, unknown>;
   const mimeType = stringValue(candidate.mimeType) ?? stringValue(candidate.mime_type) ?? stringValue(candidate.mediaType) ?? '';
-  if (!mimeType) {
-    return undefined;
+  if (mimeType) {
+    const data = bytesValue(candidate.data) ?? bytesValue(candidate.value) ?? bytesValue(candidate.bytes);
+    if (data) {
+      return { mimeType, data };
+    }
+
+    const dataUrl = stringValue(candidate.data) ?? stringValue(candidate.value) ?? stringValue(candidate.url);
+    const fromDataUrl = dataUrl ? dataPartFromDataUrl(dataUrl, mimeType) : undefined;
+    if (fromDataUrl) {
+      return fromDataUrl;
+    }
   }
 
-  const data = bytesValue(candidate.data) ?? bytesValue(candidate.value);
-  if (!data) {
-    return undefined;
+  const nested = candidate.value ?? candidate.part ?? candidate.content;
+  if (nested && nested !== part) {
+    if (Array.isArray(nested)) {
+      for (const item of nested) {
+        const dataPart = getDataPart(item);
+        if (dataPart) {
+          return dataPart;
+        }
+      }
+      return undefined;
+    }
+
+    return getDataPart(nested);
   }
 
-  return { mimeType, data };
+  return undefined;
 }
 
 function stringValue(value: unknown): string | undefined {
@@ -200,6 +219,18 @@ function bytesValue(value: unknown): Uint8Array | undefined {
     return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
   }
   return undefined;
+}
+
+function dataPartFromDataUrl(value: string, fallbackMimeType: string): { mimeType: string; data: Uint8Array } | undefined {
+  const match = value.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) {
+    return undefined;
+  }
+
+  return {
+    mimeType: match[1] || fallbackMimeType,
+    data: Buffer.from(match[2], 'base64'),
+  };
 }
 
 function mapRole(role: vscode.LanguageModelChatMessageRole): 'user' | 'assistant' {

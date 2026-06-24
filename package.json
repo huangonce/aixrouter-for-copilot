@@ -2,7 +2,7 @@
   "name": "magic-router-for-copilot",
   "displayName": "Magic Router for Copilot",
   "description": "Use Magic Router models directly from the GitHub Copilot Chat model picker. BYOK, vision-capable models, thinking mode, and agent tools.",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "packageManager": "pnpm@9.15.9",
   "publisher": "aixrouter",
   "icon": "resources/icon.png",

@@ -105,6 +105,8 @@ export class AIXRouterChatProvider implements vscode.LanguageModelChatProvider {
     try {
       const request = this.createRequest(model, messages, options as ModelOptions);
       const selectedContext = getConfiguredContextWindow(model, options as ModelOptions);
+      this.logger.debug(`Model capabilities id=${model.id} vision=${model.vision === true} thinking=${model.thinking === true} toolCalling=${model.toolCalling !== false}`);
+      this.logger.debug(`VS Code modelInfo capabilities imageInput=${modelInfo.capabilities.imageInput === true} toolCalling=${modelInfo.capabilities.toolCalling ?? false}`);
       this.logger.debug(`POST model=${request.model} messages=${request.messages.length} images=${countImageParts(request)} tools=${request.tools?.length ?? 0} context=${selectedContext ?? 'default'}`);
       this.logger.debug(`Input parts ${summarizeMessageParts(messages)}`);
 

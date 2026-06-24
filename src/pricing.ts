@@ -111,7 +111,7 @@ export function mergePublicModelEnrichment(
       sourceType: model.sourceType ?? enrichment.sourceType,
       maxInputTokens: Math.max(model.maxInputTokens ?? 0, enrichment.maxInputTokens ?? 0) || model.maxInputTokens,
       maxOutputTokens: Math.max(model.maxOutputTokens ?? 0, enrichment.maxOutputTokens ?? 0) || model.maxOutputTokens,
-      vision: model.vision ?? enrichment.vision,
+      vision: model.vision === true || enrichment.vision === true ? true : model.vision ?? enrichment.vision,
       contextWindows: model.contextWindows?.length ? model.contextWindows : getContextWindowsFromEnrichment(enrichment, modelText),
       pricing,
       priceCategory: model.priceCategory ?? getPriceCategory(pricing?.outputPer1M),
