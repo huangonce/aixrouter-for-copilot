@@ -109,7 +109,7 @@ export class AIXRouterChatProvider implements vscode.LanguageModelChatProvider {
     try {
       const rawRequest = this.createRequest(model, messages, options as ModelOptions);
       const routeHint = getModelRouteHint(model);
-      const compatibilityMode = isClaudeRouteHint(routeHint) ? 'full' : getRequestCompatibilityMode();
+      const compatibilityMode = getRequestCompatibilityMode();
       const compatibility = applyRequestCompatibility(rawRequest, compatibilityMode);
       const request = compatibility.request;
       const selectedContext = getConfiguredContextWindow(model, options as ModelOptions);
@@ -296,11 +296,6 @@ function overwriteErrorProperty(error: Error, key: 'message' | 'stack' | 'cause'
   } catch {
     // Keep the runtime-provided value when it cannot be replaced.
   }
-}
-
-function isClaudeRouteHint(value: string): boolean {
-  const normalized = value.toLowerCase();
-  return normalized.startsWith('claude-') || normalized.includes('/claude-') || normalized.includes('anthropic');
 }
 
 function getConfiguredReasoningEffort(

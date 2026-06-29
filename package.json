@@ -2,7 +2,7 @@
   "name": "aixrouter-for-copilot",
   "displayName": "AIXRouter for Copilot",
   "description": "Use AIXRouter models directly from the GitHub Copilot Chat model picker. BYOK, vision-capable models, thinking mode, and agent tools.",
-  "version": "0.1.16",
+  "version": "0.1.19",
   "packageManager": "pnpm@9.15.9",
   "publisher": "aixrouter",
   "icon": "resources/icon.png",

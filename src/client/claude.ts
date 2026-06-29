@@ -213,21 +213,53 @@ export function summarizeClaudeRequest(endpoint: string, request: ClaudeMessageR
 export function toClaudeMessageRequest(request: ChatCompletionRequest, stream: boolean): ClaudeMessageRequest {
   const messages: ClaudeMessage[] = [];
   const systemParts: string[] = [];
+  const pendingToolUseIds = new Set<string>();
+  let pendingToolUseMessage: ClaudeMessage | undefined;
+
+  const discardPendingToolUses = () => {
+    if (!pendingToolUseMessage || pendingToolUseIds.size === 0) {
+      pendingToolUseIds.clear();
+      pendingToolUseMessage = undefined;
+      return;
+    }
+
+    const keptContent = pendingToolUseMessage.content.filter((block) => {
+      return block.type !== 'tool_use' || !pendingToolUseIds.has(block.id);
+    });
+    pendingToolUseMessage.content.splice(0, pendingToolUseMessage.content.length, ...keptContent);
+    if (pendingToolUseMessage.content.length === 0) {
+      const index = messages.indexOf(pendingToolUseMessage);
+      if (index >= 0) {
+        messages.splice(index, 1);
+      }
+    }
+    pendingToolUseIds.clear();
+    pendingToolUseMessage = undefined;
+  };
 
   for (const message of request.messages) {
     if (message.role === 'system') {
+      discardPendingToolUses();
       systemParts.push(textFromContent(message.content));
       continue;
     }
 
     if (message.role === 'tool') {
+      if (!pendingToolUseIds.has(message.tool_call_id)) {
+        continue;
+      }
       appendClaudeMessage(messages, {
         role: 'user',
         content: [{ type: 'tool_result', tool_use_id: message.tool_call_id, content: message.content }],
       });
+      pendingToolUseIds.delete(message.tool_call_id);
+      if (pendingToolUseIds.size === 0) {
+        pendingToolUseMessage = undefined;
+      }
       continue;
     }
 
+    discardPendingToolUses();
     const content = toClaudeContent(message.content);
     for (const toolCall of message.tool_calls ?? []) {
       content.push({
@@ -236,12 +268,18 @@ export function toClaudeMessageRequest(request: ChatCompletionRequest, stream: b
         name: toolCall.function.name,
         input: parseToolArguments(toolCall.function.arguments),
       });
+      pendingToolUseIds.add(toolCall.id);
     }
 
     if (content.length > 0) {
       appendClaudeMessage(messages, { role: message.role, content });
+      if (message.tool_calls?.length) {
+        pendingToolUseMessage = messages.at(-1);
+      }
     }
   }
+
+  discardPendingToolUses();
 
   const maxTokens = request.max_tokens ?? 4096;
   const thinking = toClaudeThinking(request.reasoning_effort, maxTokens);

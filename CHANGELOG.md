@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.19
+
+- Improve: Prefix output-channel log lines with ISO timestamps for easier request tracing.
+
+## 0.1.18
+
+- Fix: Drop stale Claude tool-use/tool-result history when a new user message interrupts the tool call chain.
+
+## 0.1.17
+
+- Fix: Let Claude requests honor stable compatibility mode so default requests omit extended thinking fields that can trigger upstream provider errors.
+
 ## 0.1.16
 
 - Fix: Map Claude tool choice to the official Messages API payload shape and keep OpenAI-only request fields out of Claude requests.

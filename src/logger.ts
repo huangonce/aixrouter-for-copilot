@@ -9,17 +9,17 @@ export class Logger {
   }
 
   info(message: string): void {
-    this.channel.appendLine(`[info] ${message}`);
+    this.channel.appendLine(formatLogLine('info', message));
   }
 
   debug(message: string): void {
     if (getDebugEnabled()) {
-      this.channel.appendLine(`[debug] ${message}`);
+      this.channel.appendLine(formatLogLine('debug', message));
     }
   }
 
   error(message: string, error?: unknown): void {
-    this.channel.appendLine(`[error] ${message}`);
+    this.channel.appendLine(formatLogLine('error', message));
     if (error) {
       this.channel.appendLine(error instanceof Error ? error.stack ?? error.message : String(error));
     }
@@ -28,4 +28,8 @@ export class Logger {
   show(): void {
     this.channel.show();
   }
+}
+
+export function formatLogLine(level: 'info' | 'debug' | 'error', message: string, date = new Date()): string {
+  return `[${date.toISOString()}] [${level}] ${message}`;
 }
