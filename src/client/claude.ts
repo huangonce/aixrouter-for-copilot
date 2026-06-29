@@ -12,9 +12,14 @@ export interface ClaudeMessageRequest {
   readonly system?: string;
   readonly stream: boolean;
   readonly tools?: ClaudeTool[];
+  readonly tool_choice?: ClaudeToolChoice;
   readonly max_tokens?: number;
   readonly temperature?: number;
   readonly thinking?: ClaudeThinking;
+}
+
+export interface ClaudeToolChoice {
+  readonly type: 'auto';
 }
 
 export interface ClaudeThinking {
@@ -246,6 +251,7 @@ export function toClaudeMessageRequest(request: ChatCompletionRequest, stream: b
     ...(systemParts.length ? { system: systemParts.join('\n\n') } : {}),
     stream,
     tools: toClaudeTools(request.tools),
+    tool_choice: toClaudeToolChoice(request.tool_choice, request.tools),
     max_tokens: maxTokens,
     temperature: thinking ? undefined : clampClaudeTemperature(request.temperature),
     thinking,
@@ -328,6 +334,16 @@ export function toClaudeTools(tools: ChatCompletionRequest['tools']): ClaudeTool
     description: tool.function.description,
     input_schema: tool.function.parameters,
   }));
+}
+
+export function toClaudeToolChoice(
+  toolChoice: ChatCompletionRequest['tool_choice'],
+  tools: ChatCompletionRequest['tools'],
+): ClaudeToolChoice | undefined {
+  if (toolChoice !== 'auto' || !tools?.length) {
+    return undefined;
+  }
+  return { type: 'auto' };
 }
 
 function textFromContent(content: ChatCompletionRequest['messages'][number]['content']): string {

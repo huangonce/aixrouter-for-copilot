@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.16
+
+- Fix: Map Claude tool choice to the official Messages API payload shape and keep OpenAI-only request fields out of Claude requests.
+
 ## 0.1.15
 
 - Fix: Keep Claude requests on the standard Anthropic Messages payload shape without prompt cache markers for upstream compatibility.
